@@ -63,15 +63,34 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
 
-      - name: Slack notification
+        - name: Slack notification
         if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          STATUS: ${{ job.status }}
+          IMAGE: ${{ steps.image.outputs.image }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "SLACK_WEBHOOK_URL not set, skipping."
+            echo "SLACK_WEBHOOK_URL secret not set, skipping."
             exit 0
           fi
-          curl -X POST -H 'Content-type: application/json' \
-          --data "{\"text\":\"🚀 Deployment to GHCR: ${{ job.status }}\nRepo: ${{ github.repository }}\nImage: ${{ steps.image.outputs.image }}\"}" \
-          $SLACK_WEBHOOK_URL
+          payload=$(cat <<EOF
+          {
+            "text": ":rocket: CI/CD ${STATUS} — ${{ github.repository }}",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": ":rocket: *CI/CD ${STATUS}*\n*Repo:* ${{ github.repository }}\n*Image:* ${IMAGE}\n*Commit:* ${SHA}\n*Run:* <${RUN_URL}|View run>"
+                }
+              }
+            ]
+          }
+          EOF
+          )
+          curl -sS -X POST -H "Content-Type: application/json" \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL"
